@@ -16,6 +16,10 @@ import com.facebook.react.bridge.Callback;
 import java.util.List;
 import java.io.File;
 
+import android.app.Activity;
+import android.support.v4.content.FileProvider;
+import android.os.Build;
+
 /**
  * NativeModule that allows JS to open emails sending apps chooser.
  */
@@ -51,10 +55,37 @@ public class RNMailModule extends ReactContextBaseJavaModule {
     return strArray;
   }
 
+  private Intent getIntent() {
+    Intent i;
+    if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+      // https://stackoverflow.com/a/42856167
+      Intent emailSelectorIntent = new Intent(Intent.ACTION_SENDTO);
+      emailSelectorIntent.setData(Uri.parse("mailto:"));
+
+      i = new Intent(Intent.ACTION_SEND);
+      i.setData(Uri.parse("mailto:"));
+      i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+      i.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+      i.setSelector( emailSelectorIntent );
+    } else {
+      i = new Intent(Intent.ACTION_SEND);
+      i.setPackage("com.google.android.gm");
+    }
+
+    return i;
+  }
+
+  private Uri getFileUri(String path) {
+    File file = new File(path);
+    file.setReadable(true, false);
+    final String providerName = reactContext.getPackageName() + ".provider";
+    final Activity activity = getCurrentActivity();
+    return FileProvider.getUriForFile(activity, providerName, file);
+  }
+
   @ReactMethod
   public void mail(ReadableMap options, Callback callback) {
-    Intent i = new Intent(Intent.ACTION_SENDTO);
-    i.setData(Uri.parse("mailto:"));
+    Intent i = getIntent();
 
     if (options.hasKey("subject") && !options.isNull("subject")) {
       i.putExtra(Intent.EXTRA_SUBJECT, options.getString("subject"));
@@ -88,8 +119,7 @@ public class RNMailModule extends ReactContextBaseJavaModule {
       ReadableMap attachment = options.getMap("attachment");
       if (attachment.hasKey("path") && !attachment.isNull("path")) {
         String path = attachment.getString("path");
-        File file = new File(path);
-        Uri p = Uri.fromFile(file);
+        final Uri p = getFileUri(path);
         i.putExtra(Intent.EXTRA_STREAM, p);
       }
     }
